@@ -16,7 +16,7 @@ static void move_cursor(int row, int col) {
     printf("\x1b[%d;%dH", row, col);
 }
 
-enum Mode { MODE_NORMAL, MODE_INSERT };
+enum Mode { MODE_NORMAL, MODE_INSERT, MODE_COMMAND };
 
 #define MAX_LINES 1000
 #define MAX_COLS  512
@@ -52,6 +52,8 @@ int main(int argc, char **argv) {
     int cx = 1, cy = 1;
     enum Mode mode = MODE_NORMAL;
     char status[256] = "NORMAL mode — Ctrl-S save, Ctrl-Q quit";
+    char cmd[64] = "";
+    int cmd_len = 0;
 
     for (;;) {
         // full redraw
@@ -70,9 +72,16 @@ int main(int argc, char **argv) {
 
         // status bar
         printf("\x1b[7m");
-        printf(" %s | %s | %s | Pos %d,%d ",
-               mode == MODE_NORMAL ? "NORMAL" : "INSERT",
-               save_path, status, cy, cx);
+        printf(" %s | %s | ",
+               mode == MODE_NORMAL ? "NORMAL" :
+               mode == MODE_INSERT ? "INSERT" : "COMMAND",
+               save_path);
+        if (mode == MODE_COMMAND) {
+            printf(":%s", cmd);
+        } else {
+            printf("%s", status);
+        }
+        printf(" | Pos %d,%d ", cy, cx);
         printf("\x1b[0m\x1b[K");
 
         // clamp cursor to screen and line
@@ -116,8 +125,12 @@ int main(int argc, char **argv) {
                 cx = 1;
                 mode = MODE_INSERT;
                 snprintf(status, sizeof(status), "INSERT — ESC to return");
+            } else if (c == ':') { // command mode
+                mode = MODE_COMMAND;
+                cmd_len = 0;
+                cmd[0] = '\0';
             }
-        } else { // MODE_INSERT
+        } else if (mode == MODE_INSERT) {
             if (c == 27) { // ESC
                 mode = MODE_NORMAL;
                 snprintf(status, sizeof(status), "NORMAL mode");
@@ -156,6 +169,41 @@ int main(int argc, char **argv) {
                     cx++;
                     if (cy > max_line_used) max_line_used = cy;
                 }
+            }
+        } else if (mode == MODE_COMMAND) {
+            if (c == 27) { // ESC
+                mode = MODE_NORMAL;
+                snprintf(status, sizeof(status), "NORMAL mode");
+            } else if (c == 127) { // backspace
+                if (cmd_len > 0) cmd[--cmd_len] = '\0';
+            } else if (c == '\r' || c == '\n') {
+                cmd[cmd_len] = '\0';
+                if (strcmp(cmd, "wq") == 0) {
+                    save_file(save_path);
+                    break;
+                } else if (strcmp(cmd, "q") == 0) {
+                    break;
+                } else if (strcmp(cmd, "dd") == 0) {
+                    int li = cy - 1;
+                    if (li < max_line_used) {
+                        for (int i = li; i < max_line_used - 1; i++) {
+                            memcpy(lines[i], lines[i + 1], line_len[i + 1]);
+                            line_len[i] = line_len[i + 1];
+                        }
+                        if (max_line_used > 1) {
+                            line_len[max_line_used - 1] = 0;
+                            max_line_used--;
+                            if (cy > max_line_used) cy = max_line_used;
+                        }
+                        snprintf(status, sizeof(status), "Deleted line");
+                    }
+                } else {
+                    snprintf(status, sizeof(status), "Unknown command: %s", cmd);
+                }
+                mode = MODE_NORMAL;
+            } else if (isprint(c) && cmd_len < (int)sizeof(cmd) - 1) {
+                cmd[cmd_len++] = c;
+                cmd[cmd_len] = '\0';
             }
         }
     }
