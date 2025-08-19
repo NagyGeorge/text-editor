@@ -41,4 +41,4 @@ configure
 config.log
 config.status
 ted
-
+*.txt
