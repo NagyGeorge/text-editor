@@ -21,7 +21,7 @@ const char *command_buffer(void) {
 
 int command_handle_char(unsigned char c, struct EditorState *ed) {
     if (c == 27) { // ESC
-        *(ed->mode) = MODE_NORMAL;
+        *(ed->mode) = 0;
         if (status_buf)
             snprintf(status_buf, status_buf_len, "NORMAL mode");
     } else if (c == 127) { // backspace
@@ -53,7 +53,7 @@ int command_handle_char(unsigned char c, struct EditorState *ed) {
             if (status_buf)
                 snprintf(status_buf, status_buf_len, "Unknown command: %s", cmd);
         }
-        *(ed->mode) = MODE_NORMAL;
+        *(ed->mode) = 0;
     } else if (isprint(c) && cmd_len < (int)sizeof(cmd) - 1) {
         cmd[cmd_len++] = c;
         cmd[cmd_len] = '\0';
